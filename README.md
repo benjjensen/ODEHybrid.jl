@@ -1,9 +1,7 @@
 # ODEHybrid.jl
 
 [![CI](https://github.com/benjjensen/ODEHybrid.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/benjjensen/ODEHybrid.jl/actions/workflows/CI.yml)
-
-[![codecov](https://codecov.io/gh/benjjensen/ODEHybrid.jl/branch/main/graph/badge.svg?token=XFGG3UQSNX)](https://codecov.io/gh/benjjensen/ODEHybrid.jl)
-
+[![codecov](https://codecov.io/gh/benjjensen/ODEHybrid.jl/branch/main/graph/badge.svg?token=XFGG3UQSNX)](https://codecov.io/gh/benjjensen/ODEHybrid.jl) 
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](http://benjjensen.github.io/ODEHybrid.jl.git/dev)
 
 This is a Julia implementation of the ODE Hybrid package made for MATLAB.
