@@ -87,8 +87,8 @@ using Test
         t_jul, x_jul = rkadapt( (t, x) -> [-x[2]; x[1]], [0.0, 10.0], [1.0; 0.0], options, a, b, c, p)
 
 
-        @test isapprox(t_mat, t_jul, atol = 1e-10)
-        @test isapprox(x_mat, x_jul, atol = 1e-10)
+        @test isapprox(t_mat, t_jul, atol = 1e-9)
+        @test isapprox(x_mat, x_jul, atol = 1e-9)
     end;
     
 end;
