@@ -1,99 +1,91 @@
-""" TODO:
-        - Figure out "unique figure" 
-        - Figure out how to safely overload "plot" for a TSL
-"""
 
 export TimeSeriesLogger
+""" 
+
+A struct for keeping track of numerous pieces of data over time throughout
+a process. It's designed to be easy to use and relatively quickly. It
+logs numeric types of any size (scalars, vectors, or matrices), as long
+as the size is consistent from sample to sample.
+ 
+Example:
+ 
+    log = TimeSeriesLogger();    # Make a new logger.
+    x   = [0; 0];
+    for t = 1:100                # Make a random walk.
+        x = x + randn(2, 1);     # Take a single step.
+        add!(log, "walk", t, x); # Log a single sample, x, at time t.
+    end
+
+    tsl_plot(log)                # Plot everything.
+ 
+
+    # We can also access specific logs by their names. In the above, we only
+    #   have one log ('walk'). Let's get that log from the logger.
+    
+    t_log, x_log = get_log(log, "walk");    # Get a specific log.
+    plot(x_log[:, 1], x_log[:, 2]);         # Do something with it.
+
+    # We can make sure a log exists before trying to do anything with it:
+ 
+    if contains(log,"walk")
+        x_log = get_log(log, "walk");
+        plot(x_log[:, 1], x_log[:, 2]);
+    ;
+
+    # If we want to log something but don't want it plotted when we call
+    #   |plot|, then we can pass in false to the logger when we add the signal.
+ 
+    add!(log, "var1", t, x, false);
+ 
+    # To group items into different figures when they're plotted, give them
+    #   "groups":
+ 
+    add!(log, "var1", t, x, true, "group1");
+    add!(log, "var2", t, y, true, "group2");
+    add!(log, "foo",  t, bar, true, "group1");
+ 
+    # All of the items with common group names will be added to the same
+    #   figures as subplots.
+
+    # Finally, we can clear out the logger with |initialize|. This deletes all
+    #   data and returns the logger to its initial state.
+
+    initialize!(log);
+
+# Methods
+-------
+
+* initialize! Clear out all data.
+* add!        Add a single data point to a time series.
+* contains    See if a time series exists (by name).
+* get_log     Return a log by name.
+* tsl_plot    Plot the logged series.
+
+# Notes
+
+TimeSeriesLogger was created as the logging mechanism for odehybrid.
+However, it's not dependent on that project and so can be used anywhere.
+
+TimeSeriesLogger is not related to the 'timeseries' class in MATLAB.
+
+Since this class never knows how much more data is going to be logged, it
+can't preallocate the appropriate amount of space. However, increasing
+the size of its data stores by one row every time a new sample is added
+is very slow. To combat this, the data store starts off small and doubles
+whenever the store is at capacity. Say we're logging a 4x1 signal. When
+the first sample is added (say it's log k), data{k}{2} will be 1x4. When
+the second signal is added, it becomes 2x4. For the third, it's 4x4, then
+8x4, 16x4, etc. A separate counter stores how much of this allocated 
+space is currently used. This reduces the number of allocations from n to
+log2(n). Practically, it saves a little time during logging without too
+much complexity.
+
+
+Online doc: http://www.anuncommonlab.com/doc/odehybrid/TimeSeriesLogger.html
+
+Copyright 2014 An Uncommon Lab
+"""
 Base.@kwdef mutable struct TimeSeriesLogger
-
-    """ TimeSeriesLogger struct
-        A struct for keeping track of numerous pieces of data over time throughout
-        a process. It's designed to be easy to use and relatively quickly. It
-        logs numeric types of any size (scalars, vectors, or matrices), as long
-        as the size is consistent from sample to sample.
-         
-        Example:
-         
-            log = TimeSeriesLogger();    % Make a new logger.
-            x   = [0; 0];
-            for t = 1:100                % Make a random walk.
-                x = x + randn(2, 1);     % Take a single step.
-                add!(log, 'walk', t, x); % Log a single sample, x, at time t.
-            end
-
-            tsl_plot(log)                % Plot everything.
-         
-
-        We can also access specific logs by their names. In the above, we only
-            have one log ('walk'). Let's get that log from the logger.
-            
-            t_log, x_log = get_log(log, "walk");    % Get a specific log.
-            plot(x_log[:, 1], x_log[:, 2]);         % Do something with it.
-        
-        We can make sure a log exists before trying to do anything with it:
-         
-            if contains(log,"walk")
-                x_log = get_log(log, "walk");
-                plot(x_log[:, 1], x_log[:, 2]);
-            end
-        
-        If we want to log something but don't want it plotted when we call
-        |plot|, then we can pass in false to the logger when we add the signal.
-         
-            add!(log, "var1", t, x, false);
-         
-        To group items into different figures when they're plotted, give them
-            "groups":
-         
-            add!(log, "var1", t, x, true, "group1");
-            add!(log, "var2", t, y, true, "group2");
-            add!(log, "foo",  t, bar, true, "group1");
-         
-        All of the items with common group names will be added to the same
-            figures as subplots.
-        
-        Finally, we can clear out the logger with |initialize|. This deletes all
-            data and returns the logger to its initial state.
-        
-            initialize(log);
-        
-        For more information on the various methods, see the individual methods
-        with |doc TimeSeriesLogger|:
-         
-        
-        Methods
-        -------
-        
-            initialize! Clear out all data.
-            add!        Add a single data point to a time series.
-            contains    See if a time series exists (by name).
-            get_log     Return a log by name.
-            tsl_plot    Plot the logged series.
-        
-        Notes
-        -----
-        
-            TimeSeriesLogger was created as the logging mechanism for odehybrid.
-            However, it's not dependent on that project and so can be used anywhere.
-            
-            TimeSeriesLogger is not related to the 'timeseries' class in MATLAB.
-            
-            Since this class never knows how much more data is going to be logged, it
-            can't preallocate the appropriate amount of space. However, increasing
-            the size of its data stores by one row every time a new sample is added
-            is very slow. To combat this, the data store starts off small and doubles
-            whenever the store is at capacity. Say we're logging a 4x1 signal. When
-            the first sample is added (say it's log k), data{k}{2} will be 1x4. When
-            the second signal is added, it becomes 2x4. For the third, it's 4x4, then
-            8x4, 16x4, etc. A separate counter stores how much of this allocated 
-            space is currently used. This reduces the number of allocations from n to
-            log2(n). Practically, it saves a little time during logging without too
-            much complexity.
-        
-        Online doc: http://www.anuncommonlab.com/doc/odehybrid/TimeSeriesLogger.html
-        
-        Copyright 2014 An Uncommon Lab
-    """
 
     # Properties
     names = []   # Unique identifier (within the group)
@@ -107,26 +99,24 @@ Base.@kwdef mutable struct TimeSeriesLogger
 end;
 
 export add!
+"""
+Add a new log or append to an existing log by name. Returns true iff a new log was created.
+
+    add!(log, "var1", t, x);
+    add!(log, "var1", t, x, true);  # Show log in plots (default)
+    add!(log, "var1", t, x, false); # Don't show log in plots
+
+    # Signals can be grouped together into figures by given them
+    #   a common group argument. Here, both var1 and var2 logs will
+    #   be plotted together.
+
+    add!(log, "var1", t,  x, true, "group1");
+    add!(log, "var2", t2, y, true, "group1");
+
+NOTE that unlike in MATLAB, the signals are stored separately in times (t)
+and data (x), (e.g., the kth pair would be log.times[k] and log.data[k])
+"""
 function add!(tsl::TimeSeriesLogger, name, t, x, show_it = true, group = "")
-    """
-        Add a new log or append to an existing log by name.
-     
-            add!(log, "var1", t, x);
-            add!(log, "var1", t, x, true);  # Show log in plots (default)
-            add!(log, "var1", t, x, false); # Don't show log in plots
-        
-        Signals can be grouped together into figures by given them
-            a common group argument. Here, both var1 and var2 logs will
-            be plotted together.
-
-            add!(log, "var1", t,  x, true, "group1");
-            add!(log, "var2", t2, y, true, "group1");
-        
-        Returns true iff a new log was created.
-
-        NOTE that unlike in MATLAB, the signals are stored separately in times (t)
-            and data (x), (e.g., the kth pair would be log.times[k] and log.data[k])
-    """
 
     # See if we've already added this variable 
     index = isempty(tsl.names) ? [] : (tsl.names .== name)
@@ -190,31 +180,33 @@ function add!(tsl::TimeSeriesLogger, name, t, x, show_it = true, group = "")
 end;
      
 export contains
+"""
+Return 'true' iff the TimeSeriesLogger contains this name 
+"""
 function contains(tsl::TimeSeriesLogger, name) 
-    # Return 'true' iff the TimeSeriesLogger contains this name 
 
     indices = findall(tsl.names .== name)
     return !isempty(indices)
 end;
 
 export get_log
-function get_log(tsl::TimeSeriesLogger, name)
-    """ 
-        Return a specific log by name.
-        
-        If one output is request, it returns the data. If two are 
-        requested, it returns the time and the data. Returns empty if
-        the logs don't exist (use the 'contains' function to test for
-        this).
+""" 
+Return a specific log by name.
 
-        Example:
-        
-            x = get_log(log, "signal1");
-            t, x = get_log(log, "signal1");
-        
-        NOTE that |t| will be ns-by-1 and x will be ns-by-nx, where
-        nx is the number of elements in a single sample.
-    """
+If one output is request, it returns the data. If two are 
+requested, it returns the time and the data. Returns empty if
+the logs don't exist (use the 'contains' function to test for
+this).
+
+Example:
+
+    x = get_log(log, "signal1");
+    t, x = get_log(log, "signal1");
+
+NOTE that |t| will be ns-by-1 and x will be ns-by-nx, where
+nx is the number of elements in a single sample.
+"""
+function get_log(tsl::TimeSeriesLogger, name)
 
     index = (tsl.names .== name)
 
@@ -228,10 +220,29 @@ function get_log(tsl::TimeSeriesLogger, name)
     return (t, x)
 end;
 
+export initialize!
+"""
+Clears out all fields in a Time Series Logger (in-place)
+"""
+function initialize!(tsl::TimeSeriesLogger)  
+    
+    tsl.names = [];
+    tsl.times = []; 
+    tsl.data  = [];
+    tsl.show  = [];
+    tsl.sizes = [];
+    tsl.count = [];
+    tsl.group = [];
+
+    return Nothing
+end;
+
 export tsl_plot
+"""
+Plot all of the signals, grouped appropriately into figures.
+A custom x label can be added to figures as well
+"""
 function tsl_plot(tsl::TimeSeriesLogger, x_label) 
-    # Plot all of the signals, grouped appropriately into figures.
-    #   A custom x label can be added to figures as well
 
     groups = unique(tsl.group)
 
@@ -285,61 +296,47 @@ function tsl_plot(tsl::TimeSeriesLogger)
     return tsl_plot(tsl, " ")
 end;
 
-export initialize!
-function initialize!(tsl::TimeSeriesLogger)  
-    # Clear everything out and start fresh.
 
-    tsl.names = [];
-    tsl.times = []; 
-    tsl.data  = [];
-    tsl.show  = [];
-    tsl.sizes = [];
-    tsl.count = [];
-    tsl.group = [];
+# # NOT CURRENTLY FINISHED
+# function unique_figure(id, name = " ", args = [])
+#     """
+#         h = unique_figure(id, varargin)
+        
+#         Creates a figure with the given ID (tag) or selects it if it already
+#         exists, allowing one to easily reuse the same figure window identified
+#         with text instead of handles. This is useful when, e.g., running a script
+#         many times after clearing between runs without having to hard-code figure
+#         numbers (which can become hard to keep track of).
+        
+#         Any additional arguments are passed along to the figure's |set| method.
+        
+#         Example:
+        
+#         h = unique_figure('trajectory');
+        
+#         Example with extra arguments:
+        
+#         h = unique_figure('trajectory', 'Name', 'Trajectory'); 
+#     """
+#     # See if there is a figure with this ID already 
+#     # h = findobj('Type', 'figure', 'Tag', id);
+#     # if isempty(h)
+#     h = plot("Tag", id, args);
 
-    return Nothing
-end;
-
-# NOT CURRENTLY FINISHED
-function unique_figure(id, name = " ", args = [])
-    """
-        h = unique_figure(id, varargin)
-        
-        Creates a figure with the given ID (tag) or selects it if it already
-        exists, allowing one to easily reuse the same figure window identified
-        with text instead of handles. This is useful when, e.g., running a script
-        many times after clearing between runs without having to hard-code figure
-        numbers (which can become hard to keep track of).
-        
-        Any additional arguments are passed along to the figure's |set| method.
-        
-        Example:
-        
-        h = unique_figure('trajectory');
-        
-        Example with extra arguments:
-        
-        h = unique_figure('trajectory', 'Name', 'Trajectory'); 
-    """
-    # See if there is a figure with this ID already 
-    # h = findobj('Type', 'figure', 'Tag', id);
-    # if isempty(h)
-    h = plot("Tag", id, args);
-
-    # else
+#     # else
             
-    #     % If we found it, select it.
-    #     figure(h);
+#     #     % If we found it, select it.
+#     #     figure(h);
         
-    #     % If there were any additional arguments, pass them along. Note
-    #     % that if there weren't and we called set(h), then it would print h
-    #     % to the command window -- probably not what we want, hence the
-    #     % condition.
-    #     if nargin > 1
-    #         set(h, varargin{:});
-    #     end
-    # end
+#     #     % If there were any additional arguments, pass them along. Note
+#     #     % that if there weren't and we called set(h), then it would print h
+#     #     % to the command window -- probably not what we want, hence the
+#     #     % condition.
+#     #     if nargin > 1
+#     #         set(h, varargin{:});
+#     #     end
+#     # end
 
-    return h
-end;
+#     return h
+# end;
 

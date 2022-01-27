@@ -1,5 +1,6 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+ODEHybrid = "734bcdfa-9b77-4718-b76e-d5faf726ad42"
 
 [compat]
 Documenter = "0.27"

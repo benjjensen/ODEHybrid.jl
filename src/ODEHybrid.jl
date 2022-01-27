@@ -1,13 +1,12 @@
 module ODEHybrid
 
-using Plots
 using Interpolations
 
 export ODE_SET
+"""
+Copy of MATLAB's ODE SET struct
+"""
 Base.@kwdef mutable struct ODE_SET
-    """
-        Copy of MATLAB's ODE SET struct
-    """
     AbsTol = 1e-6
     BDF = []
     Events = []
@@ -43,104 +42,105 @@ include("vectors_to_states.jl")
 
 
 export odehybrid
+""" 
+Hybrid continuous and discrete propagation.
+
+This function propagates an ordinary differential equation along with a
+discrete update equation in a manner similar to MATLAB's ode45 function
+(which only propagates an ordinary differential equation). This is useful
+for implementing discrete-time controllers or simulating processes that
+are updated at discrete intervals.
+
+A large number of examples can be found in examples_odehybrid or by
+entering the following at the command line:
+
+# home = fileparts(which('examples_odehybrid'));
+# web(fullfile(home, 'html', 'examples_odehybrid.html'));
+
+Interfaces:
+
+    t, yc, td, yd = odehybrid(solver, ode, de, 
+                                dt, ts, yc0, yd0);
+
+    t, yc1m, td, yd1n = odehybrid(solver, ode, de,
+                                dt, ts, [yc1, yc2m] [yd1, yd2n]);
+
+    t, ..., td, ..., te, yc1m, yd1n, ie = odehybrid(solver, ode, de, 
+                                                      dt, ts, yc0, yd0);
+
+    sol = odehybrid(solver, ode, [de1, de2, ...], [dt1, dt2, ...], 
+                        ts, yc0, yd0);
+
+    sol = odehybrid(..., [options], [log]);
+    sol = odehybrid(...);
+
+Inputs:
+
+    solver  Continuous-time propagator to use, e.g. ODEHybrid.rkadapt
+    ode     Ordinary differential equation to use with solver. The interface
+              should be fun(t, xc1, xc2, ..., xcm, xd1, xd2, ..., xdn) where
+              xc1, xc2, ..., xcm are the continuous states and xd1, xd2, ..., 
+              xdn are the discrete states. It should return the derivatives of
+              the continuous states (m outputs).
+    de      Discrete update equation(s) (either a function or cell
+              array of functions) with the same inputs as ode but
+              outputing the updated continuous and discrete states (n+m
+              outputs).
+    dt      Time step(s) of discrete update equation(s). If de is an
+              array of multiple functions, this should be an array of the same
+              size.
+    ts      Time span, [t_start, t_end]
+    yc0     Array of initial continuous states
+    yd0     Array of initial discrete states
+    options (Optional) options structure from odeset
+    log     (Optional) TimeSeriesLogger for logging in the ode and de. If a
+              log is passed in, both ode and de *must* be able to accomodate
+              having a log input or not as the final argument. E.g., |ode|
+              will be called as: ode(t, xc1, ..., xd1, ..., xdn) and
+              ode(t, xc1, ..., xd1, ..., xdn, log).
+
+Outputs:
+
+    t       Times corresponding to continuous states (nc-by-1)
+    yc1m    Continuous state outputs (m outputs, each nc-by-1)
+    td      Times corresponding to discrete state updates (nd-by-1)
+    yd1n    Discrete state outputs (n outputs, each nd-by-1)
+    te      Times corresponding to events (ne-by-1)
+    yce1m   Continuous states at events (m outputs, each ne-by-1)
+    yde1n   Discrete states at events (n outputs, each ne-by-1)
+    ie      Index of triggering event. See documentation in odeset for more 
+              on events.
+    sol     If a single output is requested, it will be a structure with
+              fields for each of the individual outputs. The various
+              continuous states will be grouped in 'yc', the discrete into
+              'yd', the continuous states at events into 'yce', and the
+              discrete states at events into 'yde'.
+
+    (NOTE that events are not currently supported!)
+
+Example:
+
+    # This is a quick example of simulating an unstable continuous system with
+    #   a stabilizing discrete-time controller.
+
+    ode = (t, x, u) -> [0 1; 2 0] * x + [0; 1] * u;  # Differential equation
+    de  = (t, x, u) -> (x, -[8 4] * x);              # Discrete update equation
+    dt  = 0.1;                                       # Discrete eq. time step (float or float array)
+    ts  = [0 5];                                     # From 0 to 5s
+    x0  = [1.0; 0.0];                                # Initial continuous state (floats, not Ints)
+    u0  = 0;                                         # Initial discrete state
+    t, x, tu, u = odehybrid(ODEHybrid.rkadapt, ode, de, dt, ts, x0, u0);    # Simulate!
+    
+    plot(t, x, xlabel = "Time", title = "Example", label = ["x₁" "x₂"])
+    scatter!(tu, u, label = "u")
+
+See also: examples_odehybrid, ode45, rkadapt, rkfixed.
+
+Online doc: http://www.anuncommonlab.com/doc/odehybrid/odehybrid.html
+
+Copyright 2014 An Uncommon Lab
+"""
 function odehybrid(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), log = [])
-
-    """ odehybrid
-
-        Hybrid continuous and discrete propagation.
-
-        This function propagates an ordinary differential equation along with a
-        discrete update equation in a manner similar to MATLAB's ode45 function
-        (which only propagates an ordinary differential equation). This is useful
-        for implementing discrete-time controllers or simulating processes that
-        are updated at discrete intervals.
-
-        A large number of examples can be found in examples_odehybrid or by
-        entering the following at the command line:
-
-        % home = fileparts(which('examples_odehybrid'));
-        % web(fullfile(home, 'html', 'examples_odehybrid.html'));
-
-        Interfaces:
-        
-            t, yc, td, yd = odehybrid(solver, ode, de, 
-                                        dt, ts, yc0, yd0);
-
-            t, yc1m, td, yd1n = odehybrid(solver, ode, de,
-                                        dt, ts, [yc1, yc2m] [yd1, yd2n]);
-
-            t, ..., td, ..., te, yc1m, yd1n, ie = odehybrid(solver, ode, de, 
-                                                              dt, ts, yc0, yd0);
-
-            sol = odehybrid(solver, ode, [de1, de2, ...], [dt1, dt2, ...], 
-                                ts, yc0, yd0);
-
-            sol = odehybrid(..., [options], [log]);
-            sol = odehybrid(...);
-
-        Inputs:
-
-            solver  Continuous-time propagator to use, e.g. @ode45
-            ode     Ordinary differential equation to use with solver. The interface
-                      should be fun(t, xc1, xc2, ..., xcm, xd1, xd2, ..., xdn) where
-                      xc1, xc2, ..., xcm are the continuous states and xd1, xd2, ..., 
-                      xdn are the discrete states. It should return the derivatives of
-                      the continuous states (m outputs).
-            de      Discrete update equation(s) (either a function handle or cell
-                      array of function handles) with the same inputs as ode but
-                      outputing the updated continuous and discrete states (n+m
-                      outputs).
-            dt      Time step(s) of discrete update equation(s). If de is an
-                      array of multiple functions, this should be an array of the same
-                      size.
-            ts      Time span, [t_start, t_end]
-            yc0     Array of initial continuous states
-            yd0     Array of initial discrete states
-            options (Optional) options structure from odeset
-            log     (Optional) TimeSeriesLogger for logging in the ode and de. If a
-                      log is passed in, both ode and de *must* be able to accomodate
-                      having a log input or not as the final argument. E.g., |ode|
-                      will be called as: ode(t, xc1, ..., xd1, ..., xdn) and
-                      ode(t, xc1, ..., xd1, ..., xdn, log).
-
-        Outputs:
-        
-            t       Times corresponding to continuous states (nc-by-1)
-            yc1m    Continuous state outputs (m outputs, each nc-by-1)
-            td      Times corresponding to discrete state updates (nd-by-1)
-            yd1n    Discrete state outputs (n outputs, each nd-by-1)
-            te      Times corresponding to events (ne-by-1)
-            yce1m   Continuous states at events (m outputs, each ne-by-1)
-            yde1n   Discrete states at events (n outputs, each ne-by-1)
-            ie      Index of triggering event. See documentation in odeset for more 
-                      on events.
-            sol     If a single output is requested, it will be a structure with
-                      fields for each of the individual outputs. The various
-                      continuous states will be grouped in 'yc', the discrete into
-                      'yd', the continuous states at events into 'yce', and the
-                      discrete states at events into 'yde'.
-
-        Example:
-
-            This is a quick example of simulating an unstable continuous system with
-            a stabilizing discrete-time controller.
-
-            ode = (t, x, u) -> [0 1; 2 0] * x + [0; 1] * u;  % Differential equation
-            de  = (t, x, u) -> (x, -[8 4] * x);              % Discrete update equation
-            dt  = 0.1;                                       % Discrete eq. time step
-            ts  = [0 5];                                     % From 0 to 5s
-            x0  = [1; 0];                                    % Initial continuous state
-            u0  = 0;                                         % Initial discrete state
-            t, x, tu, u = odehybrid(rkadapt, ode, de, dt, ts, x0, u0);    % Simulate!
-            plot(t, x, tu, u, '.'); xlabel('Time');                       % Plot 'em.
-            legend('x₁', 'x₂', 'u');                                      % Label 'em.
-
-        See also: examples_odehybrid, ode45, rkadapt, rkfixed.
-
-        Online doc: http://www.anuncommonlab.com/doc/odehybrid/odehybrid.html
-
-        Copyright 2014 An Uncommon Lab
-    """
 
     # Check inputs
     if maximum(size(ts)) != 2
@@ -164,21 +164,65 @@ function odehybrid(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), log =
     return output
 end
 
+export odeplot   
+""" 
+Attempted port of MATLAB's odeplot that *appears* to match outputs.
+Saves data and generates a plot.
+"""  
+# TODO currently uses globals to store, which is not ideal...
+function odeplot(t, y, flag)
+
+    error = false
+
+    try
+        if flag == "init"
+            global odeplot_x_vals = [t[1]]
+            global odeplot_y_vals = y
+
+        elseif flag == "done"
+            a = scatter(odeplot_x_vals, odeplot_y_vals', title = "ODE Plot")
+            a = plot!(odeplot_x_vals, odeplot_y_vals', label = false, title = false)
+            display(a)
+
+        else
+            global odeplot_x_vals = [odeplot_x_vals[:]; t]
+            global odeplot_y_vals = [odeplot_y_vals y]
+        end
+    catch 
+        error = false 
+    end
+
+    return error
+end
+
+export vec_to_mat  
+"""
+Helper function that converts a N-element vector with each element of length M into an N x M matrix 
+"""
+function vec_to_mat(vec)
+
+    N = length(vec)
+    M = maximum(size(vec[1]))
+    mat = zeros(N, M)
+    for i = 1:N
+        mat[i, :] = vec[i]
+    end
+
+    return mat 
+end;
+
 # Run the continuous-discrete-input version of odehybrid.
 function odehybridfull(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), log = [])
-
-    """ odehybrid full 
-
+    """
         Formats arguments as needed and then passes them into ODE Hybrid Core. 
-        Also unconverts outputs before returning
+        Also unconverts outputs before returning.
     """
 
-    # Let the user pass in cells or anything else, but always make sure we
-    # work with cells. This simplifies life when we have to dynamically
+    # Let the user pass in arrays or anything else, but always make sure we
+    # work with arrays. This simplifies life when we have to dynamically
     # pass these into functions.
 
     # UPDATED: Only make non-structs into an array
-    #   ^ why?
     if !isa(yc0, Array) && (isa(yc0, Number) || isa(yc0, Char))
         yc0 = [yc0]
     end
@@ -225,13 +269,11 @@ function odehybridfull(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), l
 
 
     ## IN MATLAB, DIFFERENT RETURN OPTIONS ARE AVAILABLE BUT WE RETURN THEM ALL HERE
-
     return outputs 
 end
 
 function odehybridcore(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), log = []) 
-    """ odehybrid core 
-
+    """ 
         Inputs: 
 
             solver  Continuous-time propagator to use, e.g. @ode45
@@ -248,8 +290,8 @@ function odehybridcore(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), l
                       array of multiple functions, this should be an array of the same
                       size.
             ts      Time span, [t_start, t_end]
-            yc0     Cell array of initial continuous states
-            yd0     Cell array of initial discrete states
+            yc0     Array of initial continuous states
+            yd0     Array of initial discrete states
             options (Optional) options structure from odeset
             log     (Optional) TimeSeriesLogger for logging in the ode and de. If a
                       log is passed in, both ode and de *must* be able to accomodate
@@ -259,14 +301,16 @@ function odehybridcore(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), l
 
         Outputs:
 
-            t 
-            yc 
-            td 
-            yd 
-            te 
-            yce 
-            yde 
+            t       Array of time values for continuous function 
+            yc      Array of continuous states corresponding to times in t
+            td      Array of time values for discrete function
+            yd      Array of discrete states corresponding to times in td
+            te      Times for each event
+            yce     Array of continuous states corresponding to events in te
+            yde     Array of discrete states corresponding to events in te
             ie 
+
+            (NOTE that events are not currently supported!)
 
     """
 
@@ -329,23 +373,7 @@ function odehybridcore(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), l
 
     # We're going to overwrite the event_fcn, so store the original.
     orig_eventfcn = options.Events 
-    
-    # # If the user passed in a log, use it.
-    # if (log != [])
-    #     # Add logging to the output (preserving the user's outputfcn if it's provided).
-
-    #     # Check the number of time steps
-    #     # num_time_steps = isa(dt, Number) ? 1 : maximum(size(dt))
-    #     updated_de = []
-    #     for k = 1:length(dt) #maximum(size(dt))
-    #         temp = (_t, _yc, _yd) -> de[k](_t, _yc, _yd, log);
-    #         push!(updated_de, temp)
-    #         # de[k] = (_t, _yc, _yd) -> de[k](_t, _yc, _yd, log);
-    #         # de[k] = (_t, _yc, _yd, _varargin = []) -> de[k](_t, _yc, _yd, log, _varargin...)
-    #     end
-    #     de = updated_de;
-    # end
-    
+        
     # Set the maximum time step to be the smaller of what's already specified or dt.
     if isempty(options.MaxStep)
         options.MaxStep = minimum(dt)
@@ -376,19 +404,11 @@ function odehybridcore(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), l
     else # isa Struct
         yd = Array{Any}(undef, maximum(size(td))) 
         yd[1] = yd0
-        # yd = [yd0; zeros(maximum(size(td)) - 1, maximum(size(yd0)))];
         yde = [];
     end
     
     # Call the output function if there is one.
     if (orig_outputfcn != [])
-
-        # TODO (Clumsy) method that allows for multiple inputs and types
-        # yc0_output = isa(yc0, Tuple) ? yc0 : (yc0,)
-        # yd0_output = isa(yd0, Tuple) ? yd0 : (yd0,)
-
-        # orig_outputfcn(ts, yc0_output..., yd0_output..., "init");
-
         orig_outputfcn(ts, yc0, yd0, "init")
     end
     
@@ -462,10 +482,6 @@ function odehybridcore(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), l
         # Make the output function with the new discrete states.
         if (log != [])  || (options.OutputFcn != [])
             options.OutputFcn = (t, y, flag) -> log_frame(t, y, flag, ode, yd0, log, orig_outputfcn)
-
-            # if (options.OutputFcn != [])
-            #     options.OutputFcn = (t, y, flag) -> log_frame(t, y, flag, ode, yd0, log, orig_outputfcn)
-            # end
         end
 
         if (options.Events != [])
@@ -488,7 +504,6 @@ function odehybridcore(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), l
             end
 
         else 
-            # NOTE Can do this -OR- can just make ODE index...? 
             if isa(yd0, Array) && length(yd0) == 1
                 tk, yck = solver( (t, y) -> ode(t, y, yd0[1]), tsk, yc0, options)
             else
@@ -532,16 +547,22 @@ function odehybridcore(solver, ode, de, dt, ts, yc0, yd0, options = ODE_SET(), l
     return [t, yc, td, yd, te, yce, yde, ie]
 end
 
-# We customize the output function to ignore 'init' and 'done'.
 function output_fcn(f, t, ycv, yd, flag, yc0)
     """
+        Custome output function that ignores "init" and "done" flags.
+
         Inputs:
 
-            t:    Time                                             |  scalar
+            t:    Time                                             |  Scalar
             ycv:  Values of continuous-time ode at given time      |  column vector
             yd:   Values of discrete-time system at given time     |  Cell of Array {[...]}
             flag: String dictating which task to run               |  String
             yc0:  Initial values/format for continuous-time eqn    |  Cell 
+
+
+        Outputs:
+
+            status:                                                |  Scalar
    
     """
 
@@ -588,8 +609,25 @@ function output_fcn(f, t, ycv, yd, flag, yc0)
     return status
 end
 
-# We customize the output function to ignore 'init' and 'done'.
 function event_fcn(f, t, ycv, yd, yc0)
+    """
+        Custome output function that ignores "init" and "done" flags.
+        NOTE that events are not currently supported
+
+        Inputs:
+
+            f:    Function to be called at each event              |  Function
+            t:    Time                                             |  Scalar
+            ycv:  Values of continuous-time ode at given time      |  column vector
+            yd:   Values of discrete-time system at given time     |  Cell of Array {[...]}
+            yc0:  Initial values/format for continuous-time eqn    |  Cell 
+
+
+        Outputs:
+
+            status: Triggers a stop when function fails            |  Boolean
+
+    """
 
     # We're going to rely on cell arrays to pass these to the original
     # output function, so make sure they're cell arrays.
@@ -605,18 +643,21 @@ function event_fcn(f, t, ycv, yd, yc0)
     return f(t, yc[:], yd[:]);
 end
 
-# Run the ODE again, this time using the log.
 function log_frame(t, y, flag, ode, yd, log = [], f = [])
     """
         Inputs:
 
             t:    Time                                                  |  Scalar
-            y:    Continuous Value ?    |  Scalar?
+            y:    Continuous Value                                      |  
             flag: String dictating what to run                          |  String ∈ {"init", "done", ""}
             ode:  Ordinary differential equation                        |  Function 
-            yd:   Discrete Value at time t? 
+            yd:   Discrete Value at time t                              |  
             log:  (Opt) Time Series Logger used to track and plot data  |  TimeSeriesLogger
             f:    (Opt) User's original OutputFcn                       |  Function 
+
+        Outputs:
+
+            status: Triggers a stop when function fails            |  Boolean
     """
 
 
@@ -645,17 +686,33 @@ function log_frame(t, y, flag, ode, yd, log = [], f = [])
     return status
 end
 
-# Convert a state vector to the appropriate state, run the ODE, and turn the result back into a vector.
 function run_ode(ode, t, ycv, yd, yc0, varargin = [])
+    """
+        Formats an ordinary differential equation to be used in ODE Hybrid Core.
+            Converts the provided state vector into the appropriate format and 
+            then runs the ODE provided by the user, returning a vector output of the ODE.
+            Called in ODE Hybrid Full when inputs are not pure numerics
+
+
+        Inputs: 
+
+            ode:  User-provided ODE function of form (t, x, u) -> ()            |  function
+            t:    Current time value                                            |  Scalar
+            ycv:  State of continuous system at provided time                   |
+            yd:   State of discrete system at provided time                     |
+            yc0:  Initial state of continuous system (used to match format)     |
+            varargin: (Optional) Extra arguments that may be passed in          |  Array
+
+        Outputs: 
+            dydvt: Output of the provided ODE
+
+    """
 
     # Pull out the continuous state first (this is how we store it).
-
     yc, _ = vector_to_state(ycv, yc0);
-    # Get the state differences.
 
-    # TODO SHOULDN"T INDEX INTO YD LIKE THIS
-    # state_difference[1:length(yc0)] = ode(t, yc[:], yd[1]);
-    # state_difference = ode(t, yc[:], yd[1]);
+
+    # Get the state differences.
 
     # TODO (Clumsy) Method of allowing for tuples, arrays, and structs to all be used 
     yc = isa(yc, Tuple) ? yc : (yc,)
@@ -663,8 +720,7 @@ function run_ode(ode, t, ycv, yd, yc0, varargin = [])
 
     varargin = ((varargin != []) && !isa(varargin, Tuple)) ? (varargin,) : varargin
 
-    
-    state_difference = ode(t, yc..., yd..., varargin...); #yd[1], varargin...) 
+    state_difference = ode(t, yc..., yd..., varargin...); 
     
     # Convert the derivative to a vector.
     dyvdt = state_to_vector(state_difference);
@@ -672,20 +728,27 @@ function run_ode(ode, t, ycv, yd, yc0, varargin = [])
     return dyvdt
 end
 
-# Convert a state vector to the appropriate state, run the ODE, and turn the result back into a vector.
 function run_de(de, t, ycv, yd, yc0, varargin = [])
-    """ run_de
-        Formats discrete equation to be used in ODE Hybrid Core 
+
+    """
+        Formats a discrete equation to be used in ODE Hybrid Core.
+            Converts the provided state vector into the appropriate format and 
+            then runs the discrete equation provided by the user, returning a vector output.
             Called in ODE Hybrid Full when inputs are not pure numerics
 
-        Inputs:
-            
-            de:    Function of form @(t, x, u)  (...)                       |  Function handle
-            t:      Time                                                                  |  scalar
-            ycv:  Values of continuous-time ode at given time     |  column vector
-            yd:    Values of discrete-time system at given time    | Cell of Array {[...]}
-            yc0:  Initial values/format for continuous-time eqn    |  Cell 
-   
+        Inputs: 
+
+            de:   User-provided discrete function of form (t, x, u) -> ()        |  function
+            t:    Current time value                                             |  Scalar
+            ycv:  State of continuous system at provided time                    |
+            yd:   State of discrete system at provided time                      |
+            yc0:  Initial state of continuous system (used to match format)      |
+            varargin: (Optional) Extra arguments that may be passed in           |  Array
+
+        Outputs: 
+            ycv:  Value of continuous function that discrete function outputs    |
+            yd:   Value of discrete function at output                           |
+
     """
 
     # Pull out the continuous state first (this is how we store it).
@@ -707,66 +770,18 @@ function run_de(de, t, ycv, yd, yc0, varargin = [])
     return ycv, yd
 end
 
-# Turn an n-by-m cell array of discrete states into a 1-by-m cell array of
-# discrete state lists each with n entries.
 function output_discrete_states(states, yd0)
+
+    """
+        Turns an [n × m] array of discrete states into an [m × 1] array of
+            discrete state lists each with n entries.
+    """
+    
     discrete_states = []
     for k = 1:length(yd0)
         push!(discrete_states, states[:, k])
     end
     return discrete_states
 end
-
-
-
-
-export odeplot      # Attempt at recreating MATLAB's ODE plot function
-function odeplot(t, y, flag)
-    """ odeplot 
-
-        Attempted port of MATLAB's odeplot that *appears* to match outputs.
-        Saves data and generates a plot.
-
-        TODO currently uses globals to store, which is not ideal...
-    """
-    error = false
-
-    try
-        if flag == "init"
-            global odeplot_x_vals = [t[1]]
-            global odeplot_y_vals = y
-
-        elseif flag == "done"
-            a = scatter(odeplot_x_vals, odeplot_y_vals', title = "ODE Plot")
-            a = plot!(odeplot_x_vals, odeplot_y_vals', label = false, title = false)
-            display(a)
-
-        else
-            global odeplot_x_vals = [odeplot_x_vals[:]; t]
-            global odeplot_y_vals = [odeplot_y_vals y]
-        end
-    catch 
-        error = false 
-    end
-
-    return error
-end
-
-export vec_to_mat   # Helper function to convert between vectors and matrices
-function vec_to_mat(vec)
-    """
-        Converts a N-element vector with each element of length M into an N x M matrix
-    """
-    N = length(vec)
-    M = maximum(size(vec[1]))
-    mat = zeros(N, M)
-    for i = 1:N
-        mat[i, :] = vec[i]
-    end
-
-    return mat 
-end;
-
-
 
 end # module

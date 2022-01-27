@@ -1,55 +1,54 @@
-""" TODO 
-        - Add in additional interpolation modes equivalent to 'nearest', etc...
+# [src/interpd.jl]
+
+using Interpolations
+
+"""         
+An interpolation function for time series which may have multiple values
+at a single timestep (e.g., discrete updates). It works like MATLAB's 
+built-in interp1.
+
+xi = interpd(t, x, ti);
+xi = interpd(t, x, ti, mode);
+
+Inputs:
+
+    t     Times  (n-by-1)
+    x     States (n-by-m)
+    ti    Output times (p-by-1)
+    mode  '-' for left-most values, '+' for right-most values (default)
+    
+    (NOTE that unlike the MATLAB version, no additional arguments can be passed in yet (e.g., 'nearest'))
+
+Outputs:
+
+    xi  States corresponding to output times (p-by-m)
+
+Example:
+
+    # Create some times and states. Note that there are two states at t=3.
+
+    t = [2.76, 2.91, 3,   3,   3.12];
+    x = [0.2,  0.3,  0.4, 1.1, 1.2];
+
+    # Create the desired output times.
+
+    ti = (2.8:0.1:3.1);
+
+    # Interpolate (t, x) linearly at ti, keeping the right-most values.
+
+    xi = interpd(t, x, ti)
+
+    # Interpolate (t, x) linearly at ti, keeping the left-most values.
+
+    xi = interpd(t, x, ti, '-')
+
+See also: examples_odehybrid.
+
+Online doc: http://www.anuncommonlab.com/doc/odehybrid/interpd.html
+
+Copyright 2014 An Uncommon Lab
 """
-
 function interpd(t, x, ti, mode)
-    """         
-        An interpolation function for time series which may have multiple values
-        at a single timestep (e.g., discrete updates). It works like MATLAB's 
-        built-in interp1.
-         
-        xi = interpd(t, x, ti);
-        xi = interpd(t, x, ti, mode);
-        
-        Inputs:
-         
-            t     Times  (n-by-1)
-            x     States (n-by-m)
-            ti    Output times (p-by-1)
-            mode  '-' for left-most values, '+' for right-most values (default)
-            
-            (NOTE that unlike the MATLAB version, no additional arguments can be passed in yet (e.g., 'nearest'))
-        
-
-        Outputs:
-        
-            xi  States corresponding to output times (p-by-m)
-         
-        Example:
-         
-            Create some times and states. Note that there are two states at t=3.
-
-                t = [2.76, 2.91, 3,   3,   3.12];
-                x = [0.2,  0.3,  0.4, 1.1, 1.2];
-         
-            Create the desired output times.
-
-                ti = (2.8:0.1:3.1);
-        
-            Interpolate (t, x) linearly at ti, keeping the right-most values.
-        
-                xi = interpd(t, x, ti)
-        
-            Interpolate (t, x) linearly at ti, keeping the left-most values.
-
-                xi = interpd(t, x, ti, '-')
-         
-        See also: examples_odehybrid.
-        
-        Online doc: http://www.anuncommonlab.com/doc/odehybrid/interpd.html
-        
-        Copyright 2014 An Uncommon Lab
-    """
     
     # Check that t and ti are columns.
     if (length(size(t)) > 1) && (~any(size(t) == 1))
@@ -154,13 +153,19 @@ function interpd(t, x, ti, mode)
     return xi
 end;
 
-function interp1(x, v, xq, options = Gridded(Linear()))
-    """ Simplified Interp1 (Ported from MATLAB)
+""" 
+Simplified Interp1 (Ported from MATLAB), which returns interpolated values of a 1-D function at query points using linear interpolation. 
 
-        x:  Vector containing sample points (in a tuple, pass in (x,) if needs be)
-        v:  Vector containing values corresponding to x 
-        xq: Vector containing coordinates of the query points
-    """
+Inputs: 
+    x:  Vector containing sample points (in a tuple, pass in (x,) if needs be)
+    v:  Vector containing values corresponding to x 
+    xq: Vector containing coordinates of the query points
+    options: (Optional) Interpolation method
+
+Outputs:
+    interp_vals:  Interpolated values at query points
+"""
+function interp1(x, v, xq, options = Gridded(Linear()))
 
     squeeze = false
 

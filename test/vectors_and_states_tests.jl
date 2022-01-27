@@ -209,12 +209,12 @@ using Test
         y3 = TESTS(1, 2);
         
         y1v = [state_to_vector([1 2 3]')'; 
-            state_to_vector([7 8 9]')'; 
-            state_to_vector([13 14 15]')'];
+               state_to_vector([7 8 9]')'; 
+               state_to_vector([13 14 15]')'];
 
         y2v = [state_to_vector([1 2; 7 8])';
-            state_to_vector([3 4; 9 0])';
-            state_to_vector([5 6; 1 2])'];
+               state_to_vector([3 4; 9 0])';
+               state_to_vector([5 6; 1 2])'];
 
         # y3v = [1 2; 3 4; 5 6];
         yv  = [y1v y2v] #, y3v];

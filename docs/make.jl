@@ -6,6 +6,10 @@ makedocs(
     format = Documenter.HTML(prettyurls = false),
     pages = [
         "Introduction" => "index.md",
+        # "Getting Started" 
+        # "Main Functions" 
+        # "Time Series Logger" 
+        # "Helper Functions"    # and conversions?
         "API" => "api.md"
     ]
 )
